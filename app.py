@@ -1,5 +1,5 @@
 import streamlit as st
-from auth import login, is_logged_in
+from auth import login, is_logged_in   # ใช้ auth.py เดิมของคุณ
 
 # -----------------------------
 # ⚙️ ตั้งค่าหน้า
@@ -11,12 +11,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ถ้าล็อกอินอยู่แล้ว ให้เด้งไปหน้า Dashboard ทันที
+# ถ้าเคยล็อกอินอยู่แล้ว → ไปหน้า Dashboard เลย
 if is_logged_in():
-    st.switch_page("pages/2_Smart_Asset_Dashboard.py")
+    st.switch_page("pages/1_หน้าหลัก.py")
+
+if "login_error" not in st.session_state:
+    st.session_state["login_error"] = ""
 
 # -----------------------------
-# 🎨 CSS: พื้นหลังม่วงสบายตา + ฟอร์มกลางจอ
+# 🎨 CSS: การ์ด login กลางจอพอดี
 # -----------------------------
 st.markdown(
     """
@@ -27,129 +30,133 @@ st.markdown(
         font-family: 'Sarabun', sans-serif;
     }
 
+    /* พื้นหลังโทนม่วง-ฟ้า */
     .stApp {
         background: radial-gradient(circle at top,
-                                    #D1C4E9 0%,
-                                    #9575CD 35%,
-                                    #673AB7 70%,
-                                    #4527A0 100%);
+                                    #C7D2FE 0%,
+                                    #6366F1 35%,
+                                    #4C1D95 80%);
     }
 
+    /* ซ่อน header / toolbar / sidebar ของ Streamlit */
     header {visibility: hidden;}
     [data-testid="stToolbar"] {visibility: hidden !important;}
+    [data-testid="stSidebar"] {display: none;}
 
-    /* ให้เนื้อหาหน้า Login อยู่กลางจอ */
+    /* ให้ block-container กลายเป็น flex แล้วจัดของไว้กลางจอ */
     .main .block-container {
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
+        max-width: 100%;
+        height: 100vh;
         padding-top: 0;
         padding-bottom: 0;
+        margin: 0;
+        display: flex;
+        justify-content: center;   /* กลางแนวนอน */
+        align-items: center;       /* กลางแนวตั้ง */
     }
 
-    /* ซ่อน sidebar ในหน้า Login */
-    [data-testid="stSidebar"] { display: none; }
-
-    /* การ์ดฟอร์มหลัก */
+    /* ใช้ตัว form ของ Streamlit เป็นการ์ด login */
     [data-testid="stForm"] {
-        width: 460px;
-        max-width: 95vw;
-        background: rgba(12, 10, 35, 0.96);
-        border-radius: 24px;
-        padding: 22px 26px 18px 26px;
-        box-shadow: 0 26px 60px rgba(0, 0, 0, 0.75);
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        color: #F5F3FF;
+        background: #F9FAFB;
+        border-radius: 28px;
+        padding: 26px 32px 22px 32px;
+        box-shadow: 0 28px 60px rgba(15, 23, 42, 0.75);
+        border: 1px solid #E5E7EB;
+        width: 430px;              /* ความกว้างการ์ด */
     }
 
-    .login-header-row {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        margin-bottom: 16px;
+    /* ให้เนื้อหาข้างใน form กว้างเต็มการ์ด */
+    [data-testid="stForm"] > div {
+        width: 100%;
     }
 
-    .login-logo {
-        width: 56px;
-        height: 56px;
-        border-radius: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 30px;
-        background: linear-gradient(135deg, #EDE7F6, #9575CD);
-        box-shadow: 0 10px 24px rgba(46, 16, 101, 0.7);
-        color: #4A148C;
-    }
-
+    /* หัวข้อด้านบนการ์ด */
     .login-title-main {
-        font-size: 22px;
+        font-size: 24px;
         font-weight: 700;
-        color: #EDE7F6;
-        letter-spacing: 0.04em;
+        color: #111827;
+        text-align: center;
+        margin-bottom: 2px;
+    }
+    .login-title-sub {
+        font-size: 13px;
+        color: #4B5563;
+        text-align: center;
+    }
+    .login-title-org {
+        font-size: 12px;
+        color: #6B21A8;
+        text-align: center;
+        margin-bottom: 14px;
+    }
+
+    /* label + input */
+    [data-testid="stTextInput"] {
+        width: 100%;
+    }
+
+    [data-testid="stTextInput"] > label {
+        color: #111827 !important;
+        font-weight: 600;
+        font-size: 13px;
         margin-bottom: 2px;
     }
 
-    .login-title-sub {
-        font-size: 13px;
-        color: #C5CAE9;
-    }
-
-    .login-org {
-        font-size: 12px;
-        color: #B39DDB;
-        margin-top: 3px;
-    }
-
-    [data-testid="stForm"] label {
-        color: #EDE7F6 !important;
-        font-weight: 500;
-        font-size: 13px;
-    }
-
-    [data-testid="stForm"] input {
-        background-color: #F5F3FF !important;
+    [data-testid="stTextInput"] input {
+        background-color: #F9FAFB !important;
         border-radius: 999px !important;
-        border: 1px solid #CE93D8 !important;
+        border: 1px solid #D1D5DB !important;
         color: #111827 !important;
-        padding-left: 18px !important;
+        padding-left: 16px !important;
         font-size: 14px !important;
     }
 
-    [data-testid="stForm"] input::placeholder {
+    [data-testid="stTextInput"] input::placeholder {
         color: #9CA3AF !important;
     }
 
-    [data-testid="stForm"] input:focus {
-        border-color: #FFB300 !important;
-        box-shadow: 0 0 0 1px #FFB300 !important;
+    [data-testid="stTextInput"] input:focus {
+        border-color: #6366F1 !important;
+        box-shadow: 0 0 0 1px #6366F1 !important;
     }
 
+    /* ปุ่มเข้าสู่ระบบ ให้กว้างเท่าการ์ด และเป็น pill */
     [data-testid="stForm"] button[kind="primary"] {
-        background: linear-gradient(135deg, #7E57C2, #5E35B1);
-        color: #FFFFFF;
+        width: 100%;
+        background: linear-gradient(135deg, #6366F1, #4C1D95);
+        color: #FFFFFF !important;
         border-radius: 999px;
         border: none;
         font-weight: 700;
         font-size: 15px;
-        padding-top: 7px;
-        padding-bottom: 7px;
-        box-shadow: 0 12px 26px rgba(46, 16, 101, 0.75);
+        padding-top: 6px;
+        padding-bottom: 6px;
+        box-shadow: 0 12px 30px rgba(79, 70, 229, 0.55);
     }
 
     [data-testid="stForm"] button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #B39DDB, #673AB7);
+        background: linear-gradient(135deg, #A5B4FC, #7C3AED);
         transform: translateY(-1px);
     }
 
+    /* กล่อง error */
+    .login-error-box {
+        margin-top: 8px;
+        margin-bottom: 4px;
+        padding: 8px 12px;
+        border-radius: 10px;
+        background: #FEE2E2;
+        border: 1px solid #F87171;
+        font-size: 12px;
+        color: #B91C1C;
+    }
+
+    /* ข้อความท้ายการ์ด */
     .login-footer-text {
         margin-top: 10px;
-        font-size: 12px;
-        color: #ECEFF4;
+        font-size: 11px;
+        color: #6B7280;
         text-align: center;
-        opacity: 0.9;
     }
     </style>
     """,
@@ -157,19 +164,16 @@ st.markdown(
 )
 
 # -----------------------------
-# 🧩 ฟอร์มเข้าสู่ระบบ (อยู่กลางจอ)
+# 🧩 ฟอร์ม Login อยู่ใน card เดียว
 # -----------------------------
+login_error = st.session_state["login_error"]
+
 with st.form("login_form"):
     st.markdown(
         """
-        <div class="login-header-row">
-            <div class="login-logo">🩺</div>
-            <div>
-                <div class="login-title-main">MEM System</div>
-                <div class="login-title-sub">Medical Equipment Management System</div>
-                <div class="login-org">โรงพยาบาลมหาวิทยาลัยพะเยา</div>
-            </div>
-        </div>
+        <div class="login-title-main">MEM System</div>
+        <div class="login-title-sub">Medical Equipment Management System</div>
+        <div class="login-title-org">โรงพยาบาลมหาวิทยาลัยพะเยา</div>
         """,
         unsafe_allow_html=True,
     )
@@ -177,16 +181,26 @@ with st.form("login_form"):
     username = st.text_input("ชื่อผู้ใช้", placeholder="เช่น ton")
     password = st.text_input("รหัสผ่าน", type="password", placeholder="กรอกรหัสผ่าน")
 
+    if login_error:
+        st.markdown(
+            f'<div class="login-error-box">{login_error}</div>',
+            unsafe_allow_html=True,
+        )
+
     submitted = st.form_submit_button("เข้าสู่ระบบ")
 
+    st.markdown(
+        '<div class="login-footer-text">สำหรับเจ้าหน้าที่ภายในเท่านั้น</div>',
+        unsafe_allow_html=True,
+    )
+
+# -----------------------------
+# 🔐 ตรวจผลการล็อกอิน
+# -----------------------------
 if submitted:
     if login(username.strip(), password):
-        # ล็อกอินสำเร็จ → ไปหน้า Dashboard ทันที
-        st.switch_page("pages/2_Smart_Asset_Dashboard.py")
+        st.session_state["login_error"] = ""
+        st.rerun()  # รอบถัดไป is_logged_in() จะเด้งไปหน้า Dashboard
     else:
-        st.error("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
-
-st.markdown(
-    '<div class="login-footer-text">สำหรับเจ้าหน้าที่ภายในเท่านั้น</div>',
-    unsafe_allow_html=True,
-)
+        st.session_state["login_error"] = "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"
+        st.rerun()
