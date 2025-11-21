@@ -7,6 +7,7 @@ EXCEL_PATH = "Smart Asset Lab.xlsx"
 QR_DIR = Path("qrcodes")
 QR_PDF_PATH = Path("qr_labels_A4_pages.pdf")
 
+
 @st.cache_data
 def load_assets(path: str) -> pd.DataFrame:
     excel_file = Path(path)
@@ -15,10 +16,12 @@ def load_assets(path: str) -> pd.DataFrame:
     df = pd.read_excel(excel_file).dropna(how="all").reset_index(drop=True)
     return df
 
+
 def list_qr_files():
     if not QR_DIR.exists():
         return []
     return sorted(QR_DIR.glob("*.png"))
+
 
 # ------------------ Auth & Page config ------------------
 st.set_page_config(page_title="QR Assets", page_icon="🔍", layout="wide")
@@ -142,7 +145,10 @@ with right:
     if assets_df.empty:
         st.warning("ไม่พบไฟล์ Smart Asset Lab.xlsx หรือข้อมูลว่าง")
     else:
-        df_filtered = assets_df.copy()
+        # สร้างสำเนาพร้อม index สำหรับแมปกลับไป Excel
+        df_work = assets_df.copy().reset_index().rename(columns={"index": "_row_id"})
+
+        df_filtered = df_work.copy()
 
         if search_text:
             s = search_text.lower()
@@ -156,8 +162,58 @@ with right:
         if dept_col and dept_filter:
             df_filtered = df_filtered[df_filtered[dept_col].isin(dept_filter)]
 
-        st.subheader("ตารางข้อมูลครุภัณฑ์ (เชื่อมกับ QR)")
-        st.dataframe(df_filtered, use_container_width=True)
+        st.subheader("ตารางข้อมูลครุภัณฑ์ (แก้ไขได้ แล้วบันทึกลง Excel)")
+
+        edited_df = st.data_editor(
+            df_filtered,
+            key="asset_editor",
+            use_container_width=True,
+            num_rows="fixed",  # ไม่ให้เพิ่ม/ลบแถว เพื่อรักษา index เดิม
+            height=500,
+        )
+
+        st.caption(
+            "✏️ แก้ไขข้อมูลในตารางด้านบนได้โดยตรง แล้วกดปุ่มด้านล่างเพื่อบันทึกกลับไปยังไฟล์ Excel"
+        )
+
+        save_btn = st.button(
+            "💾 บันทึกการเปลี่ยนแปลงลงไฟล์ Excel",
+            type="primary",
+            use_container_width=True,
+        )
+
+        if save_btn:
+            try:
+                if edited_df.empty:
+                    st.warning("ไม่มีข้อมูลให้บันทึก")
+                else:
+                    # ใช้สำเนาของข้อมูลเดิมทั้งหมด
+                    full_df = assets_df.copy()
+
+                    # อัปเดตเฉพาะแถวที่แสดงอยู่ (ตาม filter)
+                    for _, row in edited_df.iterrows():
+                        row_id = int(row["_row_id"])
+                        for col in edited_df.columns:
+                            if col == "_row_id":
+                                continue
+                            full_df.at[row_id, col] = row[col]
+
+                    # เรียง index กลับ และบันทึกลง Excel
+                    full_df = full_df.sort_index().reset_index(drop=True)
+                    full_df.to_excel(EXCEL_PATH, index=False)
+
+                    # ล้าง cache เพื่อให้โหลดข้อมูลใหม่ในรอบถัดไป
+                    load_assets.clear()
+
+                    st.success("บันทึกข้อมูลกลับไปยังไฟล์ Excel เรียบร้อยแล้ว ✅")
+
+            except PermissionError:
+                st.error(
+                    "ไม่สามารถบันทึกไฟล์ได้ เนื่องจากไฟล์ Excel ถูกเปิดใช้งานอยู่ "
+                    "กรุณาปิดไฟล์ 'Smart Asset Lab.xlsx' ใน Excel แล้วลองใหม่อีกครั้ง"
+                )
+            except Exception as e:
+                st.error(f"เกิดข้อผิดพลาดในการบันทึกไฟล์: {e}")
 
 st.markdown("---")
 
@@ -165,7 +221,10 @@ st.markdown("---")
 st.subheader("รายการไฟล์ QR Code ในโฟลเดอร์ `qrcodes/`")
 
 if not qr_files:
-    st.info("ยังไม่พบไฟล์ .png ในโฟลเดอร์ `qrcodes/` กรุณาสร้าง QR ด้วยสคริปต์ `build_pages_and_qr.py` ก่อน")
+    st.info(
+        "ยังไม่พบไฟล์ .png ในโฟลเดอร์ `qrcodes/` "
+        "กรุณาสร้าง QR ด้วยสคริปต์ `build_pages_and_qr.py` ก่อน"
+    )
 else:
     cols = st.columns(4)
     for idx, qr_path in enumerate(qr_files):
@@ -175,8 +234,12 @@ else:
             st.image(str(qr_path), use_container_width=True)
             filename = qr_path.name
             stem = qr_path.stem
-            st.markdown(f'<div class="qr-filename">{stem}</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="qr-sub">ไฟล์: {filename}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="qr-filename">{stem}</div>', unsafe_allow_html=True
+            )
+            st.markdown(
+                f'<div class="qr-sub">ไฟล์: {filename}</div>', unsafe_allow_html=True
+            )
 
             with open(qr_path, "rb") as f:
                 st.download_button(
@@ -186,4 +249,4 @@ else:
                     key=f"dl_{stem}",
                     use_container_width=True,
                 )
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
