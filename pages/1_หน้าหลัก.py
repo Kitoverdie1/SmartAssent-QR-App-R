@@ -53,12 +53,24 @@ st.markdown(
         font-size: 14px;
         opacity: 0.90;
     }
-    .metric-card {
-        background: #FFFFFF;
-        border-radius: 16px;
-        padding: 16px 18px;
-        border: 1px solid #E3F2FD;
-        box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+
+    /* เดิมใช้ metric-card ทีละคอลัมน์ ตอนนี้จะใช้เป็น summary-row pill ยาว */
+    .summary-row{
+        display:flex;
+        gap:12px;
+        margin-top:-10px;     /* ดันกล่องขึ้นมาใกล้กรอบสีน้ำเงิน */
+        margin-bottom:22px;
+    }
+    .summary-card{
+        flex:1;
+        background:#FFFFFF;
+        border-radius:999px;
+        padding:12px 18px;
+        border:1px solid #E3F2FD;
+        box-shadow:0 10px 28px rgba(15,23,42,0.08);
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
     }
     .metric-label {
         font-size: 13px;
@@ -71,7 +83,7 @@ st.markdown(
     }
     .metric-badge {
         font-size: 11px;
-        padding: 2px 8px;
+        padding: 2px 10px;
         border-radius: 999px;
         display: inline-block;
         margin-top: 4px;
@@ -118,7 +130,6 @@ if df.empty:
 status_col = find_status_column(df.columns)
 
 # ------------------ Metrics ------------------
-col_all, col_ok, col_repairable, col_broken, col_missing = st.columns(5)
 total_assets = len(df)
 
 def count_status(keywords):
@@ -127,44 +138,60 @@ def count_status(keywords):
     pattern = "|".join(keywords)
     return df[status_col].astype(str).str.contains(pattern, case=False, na=False).sum()
 
-with col_all:
-    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.markdown('<div class="metric-label">รวมครุภัณฑ์ทั้งหมด</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="metric-value">{total_assets:,}</div>', unsafe_allow_html=True)
-    st.markdown('<span class="metric-badge gray">ทั้งหมด</span>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+ready_count      = count_status(["พร้อมใช้", "พร้อมใช้งาน"])
+repairable_count = count_status(["ชำรุดซ่อมแซมได้", "ซ่อมได้"])
+broken_count     = count_status(["ชำรุดซ่อมแซมไม่ได้", "ซ่อมไม่ได้"])
+missing_count    = count_status(["ตรวจไม่พบ", "สูญหาย"])
 
-with col_ok:
-    ready_count = count_status(["พร้อมใช้", "พร้อมใช้งาน"])
-    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.markdown('<div class="metric-label">พร้อมใช้งาน</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="metric-value">{ready_count:,}</div>', unsafe_allow_html=True)
-    st.markdown('<span class="metric-badge green">สถานะดี</span>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+# แสดง metrics บนกรอบสีขาวแบบ pill ยาว 5 ช่อง
+st.markdown(
+    f"""
+<div class="summary-row">
 
-with col_repairable:
-    repairable_count = count_status(["ชำรุดซ่อมแซมได้", "ซ่อมได้"])
-    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.markdown('<div class="metric-label">ชำรุดซ่อมแซมได้</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="metric-value">{repairable_count:,}</div>', unsafe_allow_html=True)
-    st.markdown('<span class="metric-badge amber">ต้องซ่อมแซม</span>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+  <div class="summary-card">
+    <div>
+      <div class="metric-label">รวมครุภัณฑ์ทั้งหมด</div>
+      <div class="metric-value">{total_assets:,}</div>
+    </div>
+    <div class="metric-badge gray">ทั้งหมด</div>
+  </div>
 
-with col_broken:
-    broken_count = count_status(["ชำรุดซ่อมแซมไม่ได้", "ซ่อมไม่ได้"])
-    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.markdown('<div class="metric-label">ชำรุดซ่อมไม่ได้</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="metric-value">{broken_count:,}</div>', unsafe_allow_html=True)
-    st.markdown('<span class="metric-badge red">พิจารณาทดแทน</span>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+  <div class="summary-card">
+    <div>
+      <div class="metric-label">พร้อมใช้งาน</div>
+      <div class="metric-value">{ready_count:,}</div>
+    </div>
+    <div class="metric-badge green">สถานะดี</div>
+  </div>
 
-with col_missing:
-    missing_count = count_status(["ตรวจไม่พบ", "สูญหาย"])
-    st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-    st.markdown('<div class="metric-label">ตรวจไม่พบ / สูญหาย</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="metric-value">{missing_count:,}</div>', unsafe_allow_html=True)
-    st.markdown('<span class="metric-badge gray">ต้องติดตาม</span>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+  <div class="summary-card">
+    <div>
+      <div class="metric-label">ชำรุดซ่อมแซมได้</div>
+      <div class="metric-value">{repairable_count:,}</div>
+    </div>
+    <div class="metric-badge amber">ต้องซ่อมแซม</div>
+  </div>
+
+  <div class="summary-card">
+    <div>
+      <div class="metric-label">ชำรุดซ่อมไม่ได้</div>
+      <div class="metric-value">{broken_count:,}</div>
+    </div>
+    <div class="metric-badge red">พิจารณาทดแทน</div>
+  </div>
+
+  <div class="summary-card">
+    <div>
+      <div class="metric-label">ตรวจไม่พบ / สูญหาย</div>
+      <div class="metric-value">{missing_count:,}</div>
+    </div>
+    <div class="metric-badge gray">ต้องติดตาม</div>
+  </div>
+
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
 # ------------------ Tabs ------------------
 tab_overview, tab_table, tab_edit = st.tabs(["📊 ภาพรวม", "📋 ตารางข้อมูล", "✏️ แก้ไข & บันทึก"])
