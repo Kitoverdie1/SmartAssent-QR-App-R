@@ -1,175 +1,140 @@
-# pages/3_แจ้งซ่อมครุภัณฑ์.py
 import streamlit as st
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
+
 from auth import is_authed, logout_button
 
 EXCEL_PATH = "Smart Asset Lab.xlsx"
-REPAIR_SHEET_NAME = "Repairs"   # ชื่อชีตเก็บรายการแจ้งซ่อม
 
-# -----------------------------
-# ตั้งค่าหน้า
-# -----------------------------
-st.set_page_config(page_title="แจ้งซ่อมครุภัณฑ์", page_icon="🛠️", layout="wide")
 
-if not is_authed():
-    st.stop()
+def get_asset_sheet_name() -> str:
+    xls = pd.ExcelFile(EXCEL_PATH)
+    return xls.sheet_names[0]
 
-# แถบด้านบนขวา: ปุ่มออกจากระบบ
-logout_button()
 
-st.markdown("""
-<style>
-.page-title{
-    font-size:32px;
-    font-weight:700;
-    margin-bottom:0;
-}
-.page-subtitle{
-    color:#6b7280;
-    margin-bottom:18px;
-}
-.card{
-    background:#ffffff;
-    border-radius:18px;
-    padding:20px 24px;
-    box-shadow:0 10px 25px rgba(15,23,42,0.06);
-}
-</style>
-""", unsafe_allow_html=True)
+def load_assets() -> pd.DataFrame:
+    if not Path(EXCEL_PATH).exists():
+        return pd.DataFrame()
+    asset_sheet = get_asset_sheet_name()
+    df = pd.read_excel(EXCEL_PATH, sheet_name=asset_sheet).dropna(how="all")
+    if "รหัสเครื่องมือห้องปฏิบัติการ" not in df.columns:
+        df["รหัสเครื่องมือห้องปฏิบัติการ"] = ""
+    if "ชื่อ" not in df.columns:
+        df["ชื่อ"] = ""
+    if "AssetID" not in df.columns:
+        df["AssetID"] = ""
+    return df[["รหัสเครื่องมือห้องปฏิบัติการ", "AssetID", "ชื่อ"]]
 
-st.markdown('<div class="page-title">แจ้งซ่อมครุภัณฑ์</div>', unsafe_allow_html=True)
-st.markdown('<div class="page-subtitle">บันทึกคำขอซ่อมครุภัณฑ์และติดตามสถานะได้จากระบบ</div>', unsafe_allow_html=True)
 
-# -----------------------------
-# 1) โหลดข้อมูลครุภัณฑ์จาก Excel
-# -----------------------------
-excel_file = Path(EXCEL_PATH)
-if not excel_file.exists():
-    st.error(f"ไม่พบไฟล์ Excel: {EXCEL_PATH}")
-    st.stop()
+def load_maintenance() -> pd.DataFrame:
+    if not Path(EXCEL_PATH).exists():
+        return pd.DataFrame()
+    try:
+        df = pd.read_excel(EXCEL_PATH, sheet_name="Maintenance")
+    except ValueError:
+        cols = [
+            "วันที่",
+            "รหัสเครื่องมือห้องปฏิบัติการ",
+            "AssetID",
+            "ชื่อ",
+            "ประเภทงาน (PM/CM)",
+            "อาการ/ปัญหา",
+            "การแก้ไข",
+            "ระดับความเสี่ยง",
+            "มาตรการควบคุมอันตราย",
+            "ผู้แจ้ง",
+            "ผู้ดำเนินการ",
+            "สถานะงาน",
+        ]
+        return pd.DataFrame(columns=cols)
+    return df
 
-# ชีตหลักสมมติเป็นชีตแรก (เหมือนที่คุณใช้หน้าอื่น)
-assets_df = pd.read_excel(EXCEL_PATH, sheet_name=0).dropna(how="all").reset_index(drop=True)
 
-# หา column รหัส + ชื่อ ให้ยืดหยุ่นกับหลายแบบชื่อคอลัมน์
-code_col = None
-for c in ["รหัสเครื่องมือห้องปฏิบัติการ", "AssetID", "รหัสครุภัณฑ์"]:
-    if c in assets_df.columns:
-        code_col = c
-        break
-
-name_col = None
-for c in ["ชื่อ", "ชื่อครุภัณฑ์", "รายการครุภัณฑ์"]:
-    if c in assets_df.columns:
-        name_col = c
-        break
-
-if code_col is None:
-    st.error("ไม่พบคอลัมน์รหัสครุภัณฑ์ (เช่น 'รหัสเครื่องมือห้องปฏิบัติการ' หรือ 'AssetID')")
-    st.stop()
-
-if name_col is None:
-    # ถ้าไม่มีชื่อ ให้สร้างคอลัมน์ว่าง ๆ ไว้
-    assets_df["ชื่อครุภัณฑ์_ชั่วคราว"] = ""
-    name_col = "ชื่อครุภัณฑ์_ชั่วคราว"
-
-# -----------------------------
-# 2) โหลดข้อมูลแจ้งซ่อมเดิม (ถ้ามี)
-# -----------------------------
-try:
-    repairs_df = pd.read_excel(EXCEL_PATH, sheet_name=REPAIR_SHEET_NAME).dropna(how="all")
-except ValueError:
-    # ยังไม่มีชีต Repairs
-    repairs_df = pd.DataFrame(columns=[
-        "repair_id",
-        "asset_code",
-        "asset_name",
-        "problem_detail",
-        "reporter_name",
-        "reporter_phone",
-        "report_date",
-        "created_at",
-        "status"
-    ])
-
-# -----------------------------
-# 3) UI หลัก: ฟอร์มแจ้งซ่อม + ตารางประวัติ
-# -----------------------------
-col_form, col_history = st.columns([1.2, 1.8])
-
-with col_form:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("ฟอร์มแจ้งซ่อม")
-
-    # เตรียม options สำหรับ selectbox
-    display_options = [
-        f"{row[code_col]} - {row[name_col]}"
-        for _, row in assets_df.iterrows()
-    ]
-    selected_display = st.selectbox(
-        "เลือกครุภัณฑ์ที่ต้องการแจ้งซ่อม",
-        options=display_options,
-        index=0 if display_options else None
-    )
-
-    report_date = st.date_input("วันที่แจ้งซ่อม", value=datetime.today())
-    problem_detail = st.text_area("อาการ / รายละเอียดปัญหา", height=120)
-
-    reporter_name = st.text_input("ชื่อผู้แจ้ง")
-    reporter_phone = st.text_input("เบอร์โทรติดต่อ")
-
-    submit = st.button("บันทึกคำขอแจ้งซ่อม", type="primary")
-
-    if submit:
-        if not selected_display or not problem_detail.strip():
-            st.warning("กรุณาเลือกครุภัณฑ์และกรอกรายละเอียดปัญหาให้ครบถ้วน")
-        else:
-            asset_code = selected_display.split(" - ")[0].strip()
-            # หา asset name จาก df
-            asset_row = assets_df.loc[assets_df[code_col] == asset_code].iloc[0]
-            asset_name = str(asset_row[name_col])
-
-            new_row = {
-                "repair_id": f"R{datetime.now().strftime('%Y%m%d%H%M%S')}",
-                "asset_code": asset_code,
-                "asset_name": asset_name,
-                "problem_detail": problem_detail.strip(),
-                "reporter_name": reporter_name.strip(),
-                "reporter_phone": reporter_phone.strip(),
-                "report_date": report_date.strftime("%Y-%m-%d"),
-                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "status": "รอรับเรื่อง"
-            }
-
-            # ต่อท้ายเข้า DataFrame
-            repairs_df = pd.concat([repairs_df, pd.DataFrame([new_row])],
-                                   ignore_index=True)
-
-            # เขียนกลับเข้า Excel แค่ชีต Repairs (ชีตอื่นยังอยู่)
-            with pd.ExcelWriter(EXCEL_PATH, engine="openpyxl",
-                                mode="a", if_sheet_exists="replace") as writer:
-                repairs_df.to_excel(writer, sheet_name=REPAIR_SHEET_NAME, index=False)
-
-            st.success("✅ บันทึกคำขอแจ้งซ่อมเรียบร้อยแล้ว")
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-with col_history:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("ประวัติการแจ้งซ่อมล่าสุด")
-
-    if repairs_df.empty:
-        st.info("ยังไม่มีรายการแจ้งซ่อม")
+def save_maintenance(df: pd.DataFrame):
+    if Path(EXCEL_PATH).exists():
+        writer = pd.ExcelWriter(
+            EXCEL_PATH, engine="openpyxl", mode="a", if_sheet_exists="replace"
+        )
     else:
-        show_cols = ["repair_id", "asset_code", "asset_name",
-                     "problem_detail", "report_date", "status"]
-        show_cols = [c for c in show_cols if c in repairs_df.columns]
+        writer = pd.ExcelWriter(EXCEL_PATH, engine="openpyxl", mode="w")
 
+    df.to_excel(writer, sheet_name="Maintenance", index=False)
+    writer.close()
+
+
+def main():
+    st.set_page_config(page_title="แจ้งซ่อม / PM", page_icon="🛠", layout="wide")
+
+    if not is_authed():
+        st.error("กรุณาเข้าสู่ระบบจากหน้า Home ก่อนใช้งาน")
+        st.stop()
+
+    st.title("🛠 ระบบบำรุงรักษา (PM/CM Maintenance)")
+    logout_button()
+
+    assets = load_assets()
+    maint_df = load_maintenance()
+
+    st.markdown("## แบบฟอร์มแจ้งซ่อม / ขอทำ PM")
+
+    with st.form("maint_form"):
+        c1, c2 = st.columns(2)
+        work_type = c1.selectbox("ประเภทงาน", ["PM (Preventive Maintenance)", "CM (Corrective Maintenance)"])
+        work_date = c2.date_input("วันที่แจ้ง/ดำเนินการ", datetime.today())
+
+        # เลือกเครื่องมือ
+        tool_code = st.selectbox(
+            "เลือกเครื่องมือ", assets["รหัสเครื่องมือห้องปฏิบัติการ"].astype(str).tolist()
+        )
+        tool_row = assets[assets["รหัสเครื่องมือห้องปฏิบัติการ"].astype(str) == str(tool_code)].iloc[0]
+        st.text_input("AssetID", value=str(tool_row["AssetID"]), disabled=True)
+        st.text_input("ชื่อเครื่องมือ", value=str(tool_row["ชื่อ"]), disabled=True)
+
+        st.text_area("อาการ/ปัญหา หรือขอบเขตงาน PM", key="issue")
+
+        c3, c4 = st.columns(2)
+        risk_level = c3.selectbox("ระดับความเสี่ยงของงานซ่อม", ["ต่ำ", "ปานกลาง", "สูง", "วิกฤติ"])
+        control = c4.text_input("มาตรการควบคุมอันตราย (เช่น Lockout/Tagout, PPE ฯลฯ)")
+
+        reporter = st.text_input("ผู้แจ้ง / ผู้ขอทำ PM")
+        status = st.selectbox("สถานะงาน", ["รอดำเนินการ", "กำลังดำเนินการ", "เสร็จสิ้น"])
+
+        submitted = st.form_submit_button("บันทึกใบงาน")
+
+    if submitted:
+        if not st.session_state.get("issue"):
+            st.error("กรุณาระบุอาการ/ปัญหา หรือขอบเขตงาน PM")
+        else:
+            new_row = {
+                "วันที่": work_date,
+                "รหัสเครื่องมือห้องปฏิบัติการ": tool_code,
+                "AssetID": tool_row["AssetID"],
+                "ชื่อ": tool_row["ชื่อ"],
+                "ประเภทงาน (PM/CM)": "PM" if work_type.startswith("PM") else "CM",
+                "อาการ/ปัญหา": st.session_state["issue"],
+                "การแก้ไข": "",
+                "ระดับความเสี่ยง": risk_level,
+                "มาตรการควบคุมอันตราย": control,
+                "ผู้แจ้ง": reporter,
+                "ผู้ดำเนินการ": "",
+                "สถานะงาน": status,
+            }
+            maint_df = pd.concat([maint_df, pd.DataFrame([new_row])], ignore_index=True)
+            save_maintenance(maint_df)
+            st.success("บันทึกใบงานเรียบร้อยแล้ว")
+            st.cache_data.clear()
+
+    st.markdown("## ประวัติงานซ่อม/บำรุงรักษาย้อนหลัง")
+    if maint_df.empty:
+        st.info("ยังไม่มีข้อมูลงานซ่อม/บำรุงรักษา")
+    else:
+        maint_df["วันที่"] = pd.to_datetime(maint_df["วันที่"], errors="coerce")
         st.dataframe(
-            repairs_df.sort_values("created_at", ascending=False)[show_cols].head(50),
-            use_container_width=True
+            maint_df.sort_values("วันที่", ascending=False),
+            use_container_width=True,
         )
 
-    st.markdown('</div>', unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()

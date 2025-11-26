@@ -1,311 +1,339 @@
 import streamlit as st
 import pandas as pd
-import altair as alt
 from pathlib import Path
-from auth import require_login, logout_button
+from datetime import date
+
+from auth import is_authed, logout_button
 
 EXCEL_PATH = "Smart Asset Lab.xlsx"
 
+
+def get_asset_sheet_name() -> str:
+    xls = pd.ExcelFile(EXCEL_PATH)
+    return xls.sheet_names[0]
+
+
 @st.cache_data
-def load_data(path: str) -> pd.DataFrame:
-    excel_file = Path(path)
-    if not excel_file.exists():
+def load_assets() -> pd.DataFrame:
+    if not Path(EXCEL_PATH).exists():
         return pd.DataFrame()
-    df = pd.read_excel(excel_file).dropna(how="all").reset_index(drop=True)
+
+    try:
+        asset_sheet = get_asset_sheet_name()
+        df = pd.read_excel(EXCEL_PATH, sheet_name=asset_sheet).dropna(how="all")
+    except Exception:
+        df = pd.read_excel(EXCEL_PATH, sheet_name=0).dropna(how="all")
+
+    base_cols = [
+        "รหัสเครื่องมือห้องปฏิบัติการ",
+        "AssetID",
+        "ชื่อ",
+        "หมวดหมู่",
+        "สถานะ",
+        "ความเสี่ยง (Risk Level)",
+        "ผู้รับผิดชอบ (ปัจจุบัน)",
+        "สถานที่ใช้งาน (ปัจจุบัน)",
+        "ผู้ผลิต",
+        "ผู้ให้บริการซ่อม",
+        "อายุการใช้งาน (ปี)",
+        "วันที่เริ่มใช้งาน",
+        "วันที่คาดว่าสิ้นสุดอายุ",
+        "Calibration Due Date",
+        "Calibration Status",
+        "PM Due Date",
+        "PM Status",
+    ]
+    for c in base_cols:
+        if c not in df.columns:
+            df[c] = None
+
     return df
 
-def save_data(df: pd.DataFrame, path: str) -> None:
-    df.to_excel(path, index=False)
 
-def find_status_column(columns) -> str | None:
-    for col in columns:
-        if "สถานะ" in str(col):
-            return col
-    return None
+@st.cache_data
+def load_sheet(sheet_name: str, columns: list) -> pd.DataFrame:
+    if not Path(EXCEL_PATH).exists():
+        return pd.DataFrame(columns=columns)
 
-# ------------------ Auth & Page config ------------------
-st.set_page_config(page_title="Smart Asset Dashboard", page_icon="📊", layout="wide")
-require_login()
-logout_button()
+    try:
+        df = pd.read_excel(EXCEL_PATH, sheet_name=sheet_name)
+        for c in columns:
+            if c not in df.columns:
+                df[c] = None
+        return df[columns]
+    except ValueError:
+        return pd.DataFrame(columns=columns)
 
-# ------------------ CSS ------------------
-st.markdown(
-    """
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap');
-    html, body, [class*="css"] {
-        font-family: 'Sarabun', sans-serif;
-    }
-    .hero-box {
-        background: linear-gradient(135deg, #1565C0, #0D47A1);
-        padding: 18px 24px;
-        border-radius: 18px;
-        color: #E3F2FD;
-        box-shadow: 0 12px 30px rgba(13, 71, 161, 0.45);
-        margin-bottom: 18px;
-    }
-    .hero-title {
-        font-size: 26px;
-        font-weight: 700;
-        margin-bottom: 2px;
-    }
-    .hero-sub {
-        font-size: 14px;
-        opacity: 0.90;
-    }
 
-    /* เดิมใช้ metric-card ทีละคอลัมน์ ตอนนี้จะใช้เป็น summary-row pill ยาว */
-    .summary-row{
-        display:flex;
-        gap:12px;
-        margin-top:-10px;     /* ดันกล่องขึ้นมาใกล้กรอบสีน้ำเงิน */
-        margin-bottom:22px;
-    }
-    .summary-card{
-        flex:1;
-        background:#FFFFFF;
-        border-radius:999px;
-        padding:12px 18px;
-        border:1px solid #E3F2FD;
-        box-shadow:0 10px 28px rgba(15,23,42,0.08);
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-    }
-    .metric-label {
-        font-size: 13px;
-        color: #6B7280;
-    }
-    .metric-value {
-        font-size: 24px;
-        font-weight: 700;
-        color: #111827;
-    }
-    .metric-badge {
-        font-size: 11px;
-        padding: 2px 10px;
-        border-radius: 999px;
-        display: inline-block;
-        margin-top: 4px;
-    }
-    .metric-badge.green {
-        background: #DCFCE7;
-        color: #166534;
-    }
-    .metric-badge.amber {
-        background: #FEF3C7;
-        color: #92400E;
-    }
-    .metric-badge.red {
-        background: #FEE2E2;
-        color: #991B1B;
-    }
-    .metric-badge.gray {
-        background: #E5E7EB;
-        color: #374151;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+def main():
+    st.set_page_config(page_title="Dashboard หลัก", page_icon="📊", layout="wide")
 
-# ------------------ Load data ------------------
-df = load_data(EXCEL_PATH)
+    if not is_authed():
+        st.error("กรุณาเข้าสู่ระบบจากหน้า Home ก่อนใช้งาน")
+        st.stop()
 
-st.markdown(
-    """
-<div class="hero-box">
-  <div class="hero-title">Smart Asset Dashboard</div>
-  <div class="hero-sub">ภาพรวมการจัดการครุภัณฑ์ & เครื่องมือห้องปฏิบัติการ</div>
-</div>
-""",
-    unsafe_allow_html=True,
-)
+    st.title("📊 Dashboard หลัก – Integrated Smart Asset & MEQ Platform")
+    logout_button()
 
-if df.empty:
-    st.error("ไม่พบไฟล์ข้อมูลหรือข้อมูลว่าง: Smart Asset Lab.xlsx")
-    st.info("ตรวจสอบว่าไฟล์อยู่ในโฟลเดอร์เดียวกับโปรเจกต์ และมีข้อมูลอย่างน้อย 1 แถว")
-    st.stop()
+    assets = load_assets()
+    maintenance = load_sheet(
+        "Maintenance",
+        [
+            "วันที่",
+            "รหัสเครื่องมือห้องปฏิบัติการ",
+            "AssetID",
+            "ชื่อ",
+            "ประเภทงาน (PM/CM)",
+            "อาการ/ปัญหา",
+            "การแก้ไข",
+            "ระดับความเสี่ยง",
+            "ผู้ดำเนินการ",
+            "สถานะงาน",
+        ],
+    )
+    calibration = load_sheet(
+        "Calibration",
+        [
+            "วันที่สอบเทียบ",
+            "รหัสเครื่องมือห้องปฏิบัติการ",
+            "AssetID",
+            "ชื่อ",
+            "ผู้ให้บริการสอบเทียบ",
+            "ผลการสอบเทียบ",
+            "ใบรายงาน (ไฟล์/เลขที่)",
+            "Calibration Due Date ถัดไป",
+            "สถานะ",
+        ],
+    )
+    risk_events = load_sheet(
+        "RiskEvents",
+        [
+            "วันที่เกิดเหตุ",
+            "รหัสเครื่องมือห้องปฏิบัติการ",
+            "เหตุการณ์",
+            "ระดับความรุนแรง (Severity)",
+            "ความถี่ (Occurrence)",
+            "การตรวจพบ (Detection)",
+            "ค่า RPN",
+            "ผู้บันทึก",
+            "สถานะเหตุการณ์",
+        ],
+    )
 
-status_col = find_status_column(df.columns)
+    today = date.today()
+    today_ts = pd.Timestamp(today)
 
-# ------------------ Metrics ------------------
-total_assets = len(df)
+    total_assets = len(assets)
+    active_assets = (assets["สถานะ"] == "พร้อมใช้งาน").sum() if "สถานะ" in assets.columns else 0
+    high_risk_assets = (assets["ความเสี่ยง (Risk Level)"] == "สูง").sum()
 
-def count_status(keywords):
-    if not status_col:
-        return 0
-    pattern = "|".join(keywords)
-    return df[status_col].astype(str).str.contains(pattern, case=False, na=False).sum()
+    calib_overdue = 0
+    if not calibration.empty:
+        calib_dt = pd.to_datetime(calibration["Calibration Due Date ถัดไป"], errors="coerce")
+        calib_overdue = ((calib_dt.notna()) & (calib_dt < today_ts)).sum()
 
-ready_count      = count_status(["พร้อมใช้", "พร้อมใช้งาน"])
-repairable_count = count_status(["ชำรุดซ่อมแซมได้", "ซ่อมได้"])
-broken_count     = count_status(["ชำรุดซ่อมแซมไม่ได้", "ซ่อมไม่ได้"])
-missing_count    = count_status(["ตรวจไม่พบ", "สูญหาย"])
+    pm_overdue = 0
+    if not assets.empty:
+        pm_dt = pd.to_datetime(assets["PM Due Date"], errors="coerce")
+        pm_overdue = ((pm_dt.notna()) & (pm_dt < today_ts)).sum()
 
-# แสดง metrics บนกรอบสีขาวแบบ pill ยาว 5 ช่อง
-st.markdown(
-    f"""
-<div class="summary-row">
-
-  <div class="summary-card">
-    <div>
-      <div class="metric-label">รวมครุภัณฑ์ทั้งหมด</div>
-      <div class="metric-value">{total_assets:,}</div>
-    </div>
-    <div class="metric-badge gray">ทั้งหมด</div>
-  </div>
-
-  <div class="summary-card">
-    <div>
-      <div class="metric-label">พร้อมใช้งาน</div>
-      <div class="metric-value">{ready_count:,}</div>
-    </div>
-    <div class="metric-badge green">สถานะดี</div>
-  </div>
-
-  <div class="summary-card">
-    <div>
-      <div class="metric-label">ชำรุดซ่อมแซมได้</div>
-      <div class="metric-value">{repairable_count:,}</div>
-    </div>
-    <div class="metric-badge amber">ต้องซ่อมแซม</div>
-  </div>
-
-  <div class="summary-card">
-    <div>
-      <div class="metric-label">ชำรุดซ่อมไม่ได้</div>
-      <div class="metric-value">{broken_count:,}</div>
-    </div>
-    <div class="metric-badge red">พิจารณาทดแทน</div>
-  </div>
-
-  <div class="summary-card">
-    <div>
-      <div class="metric-label">ตรวจไม่พบ / สูญหาย</div>
-      <div class="metric-value">{missing_count:,}</div>
-    </div>
-    <div class="metric-badge gray">ต้องติดตาม</div>
-  </div>
-
-</div>
-""",
-    unsafe_allow_html=True,
-)
-
-# ------------------ Tabs ------------------
-tab_overview, tab_table, tab_edit = st.tabs(["📊 ภาพรวม", "📋 ตารางข้อมูล", "✏️ แก้ไข & บันทึก"])
-
-# Tab 1: Overview
-with tab_overview:
-    col_chart, col_side = st.columns([2, 1])
-
-    if status_col:
-        status_counts = df[status_col].value_counts().reset_index()
-        status_counts.columns = ["สถานะ", "จำนวน"]
-
-        with col_chart:
-            st.subheader("สัดส่วนตามสถานะครุภัณฑ์")
-            base = alt.Chart(status_counts).encode(
-                theta=alt.Theta(field="จำนวน", type="quantitative"),
-                color=alt.Color(field="สถานะ", type="nominal"),
-            )
-            pie = base.mark_arc(innerRadius=60)
-            text = base.mark_text(radius=80, size=14).encode(text="จำนวน:Q")
-            st.altair_chart(pie + text, use_container_width=True)
-
-        with col_side:
-            st.subheader("รายละเอียดสถานะ")
-            st.dataframe(status_counts, use_container_width=True, hide_index=True)
-    else:
-        st.info("ไม่พบคอลัมน์ 'สถานะ' ในไฟล์ Excel จึงไม่สามารถสร้างแผนภูมิสถานะได้")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("จำนวนเครื่องมือทั้งหมด", f"{total_assets:,}")
+    col2.metric("พร้อมใช้งาน", f"{active_assets:,}")
+    col3.metric("High Risk", f"{high_risk_assets:,}")
+    col4.metric("เกินกำหนดสอบเทียบ", f"{calib_overdue:,}")
 
     st.markdown("---")
 
-    dept_col = None
-    for c in df.columns:
-        if "หน่วยงาน" in str(c) or "แผนก" in str(c):
-            dept_col = c
-            break
-
-    if dept_col and status_col:
-        st.subheader(f"จำนวนครุภัณฑ์ตามหน่วยงาน ({dept_col})")
-        dept_counts = (
-            df.groupby([dept_col, status_col])
-            .size()
-            .reset_index(name="จำนวน")
-        )
-
-        chart = (
-            alt.Chart(dept_counts)
-            .mark_bar()
-            .encode(
-                x=alt.X(f"{dept_col}:N", sort="-y", title="หน่วยงาน"),
-                y=alt.Y("จำนวน:Q"),
-                color=alt.Color(f"{status_col}:N", title="สถานะ"),
-                tooltip=[dept_col, status_col, "จำนวน"],
-            )
-        )
-        st.altair_chart(chart, use_container_width=True)
-    else:
-        st.info("หากต้องการกราฟตามหน่วยงาน กรุณามีคอลัมน์ 'หน่วยงาน' หรือ 'แผนก' ในไฟล์ Excel")
-
-# Tab 2: Table view
-with tab_table:
-    st.subheader("ตารางข้อมูลครุภัณฑ์ทั้งหมด")
-
-    col_filters = st.columns(3)
-    with col_filters[0]:
-        search_text = st.text_input("🔍 ค้นหาจากชื่อ / รหัส / AssetID", "")
-    with col_filters[1]:
-        if status_col:
-            status_filter = st.multiselect(
-                "กรองตามสถานะ",
-                options=sorted(df[status_col].dropna().unique()),
-                default=[],
-            )
-        else:
-            status_filter = []
-    with col_filters[2]:
-        dept_col = None
-        for c in df.columns:
-            if "หน่วยงาน" in str(c) or "แผนก" in str(c):
-                dept_col = c
-                break
-        if dept_col:
-            dept_filter = st.multiselect(
-                "กรองตามหน่วยงาน",
-                options=sorted(df[dept_col].dropna().unique()),
-                default=[],
-            )
-        else:
-            dept_filter = []
-
-    filtered_df = df.copy()
-    if search_text:
-        s = search_text.lower()
-        filtered_df = filtered_df[filtered_df.apply(lambda r: s in str(r).lower(), axis=1)]
-    if status_col and status_filter:
-        filtered_df = filtered_df[filtered_df[status_col].isin(status_filter)]
-    if dept_col and dept_filter:
-        filtered_df = filtered_df[filtered_df[dept_col].isin(dept_filter)]
-
-    st.dataframe(filtered_df, use_container_width=True)
-
-# Tab 3: Edit & Save
-with tab_edit:
-    st.subheader("แก้ไขข้อมูลและบันทึกกลับไปยัง Excel")
-    st.info("แก้ไขข้อมูลในตารางด้านล่างได้โดยตรง แล้วกดปุ่มบันทึกเพื่อเขียนกลับไปยังไฟล์ Excel")
-
-    edited_df = st.data_editor(
-        df,
-        num_rows="dynamic",
-        use_container_width=True,
-        key="asset_editor",
+    tabs = st.tabs(
+        [
+            "1) Asset Master Data",
+            "2) Calibration Management",
+            "3) PM/CM Maintenance",
+            "4) Risk & Safety",
+            "5) Quality Documents (ภาพรวม)",
+            "6) Analytics Snapshot",
+            "7) Smart Notification (ภาพรวม)",
+        ]
     )
 
-    if st.button("💾 บันทึกการเปลี่ยนแปลงไปยัง Excel", type="primary"):
-        save_data(edited_df, EXCEL_PATH)
-        st.success("บันทึกข้อมูลเรียบร้อยแล้ว ✅")
-        st.cache_data.clear()
-        st.experimental_rerun()
+    # 1) Asset
+    with tabs[0]:
+        st.subheader("Asset Master Data – ทะเบียนครุภัณฑ์และเครื่องมือแพทย์")
+        if assets.empty:
+            st.info("ยังไม่มีข้อมูลครุภัณฑ์ในไฟล์ Excel")
+        else:
+            c1, c2, c3 = st.columns(3)
+            status_filter = c1.multiselect("สถานะ", sorted(assets["สถานะ"].dropna().unique().tolist()))
+            risk_filter = c2.multiselect("ระดับความเสี่ยง", sorted(assets["ความเสี่ยง (Risk Level)"].dropna().unique().tolist()))
+            dept_filter = c3.multiselect(
+                "สถานที่ใช้งาน (ปัจจุบัน)",
+                sorted(assets["สถานที่ใช้งาน (ปัจจุบัน)"].dropna().unique().tolist()),
+            )
+
+            df_view = assets.copy()
+            if status_filter:
+                df_view = df_view[df_view["สถานะ"].isin(status_filter)]
+            if risk_filter:
+                df_view = df_view[df_view["ความเสี่ยง (Risk Level)"].isin(risk_filter)]
+            if dept_filter:
+                df_view = df_view[df_view["สถานที่ใช้งาน (ปัจจุบัน)"].isin(dept_filter)]
+
+            st.dataframe(
+                df_view[
+                    [
+                        "รหัสเครื่องมือห้องปฏิบัติการ",
+                        "ชื่อ",
+                        "หมวดหมู่",
+                        "สถานะ",
+                        "ความเสี่ยง (Risk Level)",
+                        "ผู้รับผิดชอบ (ปัจจุบัน)",
+                        "สถานที่ใช้งาน (ปัจจุบัน)",
+                        "Calibration Due Date",
+                        "PM Due Date",
+                    ]
+                ].sort_values("รหัสเครื่องมือห้องปฏิบัติการ"),
+                use_container_width=True,
+            )
+
+    # 2) Calibration
+    with tabs[1]:
+        st.subheader("ระบบสอบเทียบ (Calibration Management)")
+        st.write("ใช้ข้อมูลจากชีต `Calibration` ในไฟล์ Smart Asset Lab.xlsx")
+
+        if calibration.empty:
+            st.info("ยังไม่มีข้อมูลชีต 'Calibration'")
+        else:
+            calib_df = calibration.copy()
+            calib_df["Calibration Due Date ถัดไป"] = pd.to_datetime(
+                calib_df["Calibration Due Date ถัดไป"], errors="coerce"
+            )
+            calib_df["สถานะ"] = calib_df["สถานะ"].fillna("ปกติ")
+
+            c1, c2 = st.columns(2)
+            status_filter = c1.multiselect("สถานะ", sorted(calib_df["สถานะ"].dropna().unique().tolist()))
+            due_mode = c2.selectbox(
+                "ตัวกรองกำหนดสอบเทียบ",
+                ["ทั้งหมด", "ใกล้กำหนด (ภายใน 30 วัน)", "เกินกำหนดแล้ว"],
+            )
+
+            if status_filter:
+                calib_df = calib_df[calib_df["สถานะ"].isin(status_filter)]
+
+            if due_mode == "ใกล้กำหนด (ภายใน 30 วัน)":
+                calib_df = calib_df[
+                    (calib_df["Calibration Due Date ถัดไป"].notna())
+                    & (calib_df["Calibration Due Date ถัดไป"] >= today_ts)
+                    & (calib_df["Calibration Due Date ถัดไป"] <= today_ts + pd.Timedelta(days=30))
+                ]
+            elif due_mode == "เกินกำหนดแล้ว":
+                calib_df = calib_df[
+                    (calib_df["Calibration Due Date ถัดไป"].notna())
+                    & (calib_df["Calibration Due Date ถัดไป"] < today_ts)
+                ]
+
+            st.dataframe(calib_df, use_container_width=True)
+
+            if not calib_df.empty:
+                st.markdown("#### สรุปจำนวนเครื่องมือแบ่งตามสถานะสอบเทียบ")
+                st.bar_chart(
+                    calib_df.groupby("สถานะ")["รหัสเครื่องมือห้องปฏิบัติการ"].count(),
+                    use_container_width=True,
+                )
+
+    # 3) Maintenance
+    with tabs[2]:
+        st.subheader("ระบบบำรุงรักษา (PM/CM Maintenance)")
+        if maintenance.empty:
+            st.info("ยังไม่มีข้อมูลชีต 'Maintenance'")
+        else:
+            maint_df = maintenance.copy()
+            maint_df["วันที่"] = pd.to_datetime(maint_df["วันที่"], errors="coerce")
+
+            c1, c2 = st.columns(2)
+            type_filter = c1.multiselect("ประเภทงาน", ["PM", "CM"], default=[])
+            status_filter = c2.multiselect(
+                "สถานะงาน",
+                maint_df["สถานะงาน"].dropna().unique().tolist(),
+            )
+
+            if type_filter:
+                maint_df = maint_df[maint_df["ประเภทงาน (PM/CM)"].isin(type_filter)]
+            if status_filter:
+                maint_df = maint_df[maint_df["สถานะงาน"].isin(status_filter)]
+
+            st.dataframe(
+                maint_df.sort_values("วันที่", ascending=False),
+                use_container_width=True,
+            )
+
+            maint_df["เดือน"] = maint_df["วันที่"].dt.to_period("M").astype(str)
+            st.markdown("#### งานซ่อม/PM แบ่งตามเดือน")
+            st.bar_chart(
+                maint_df.groupby(["เดือน", "ประเภทงาน (PM/CM)"])["รหัสเครื่องมือห้องปฏิบัติการ"]
+                .count()
+                .unstack(fill_value=0),
+                use_container_width=True,
+            )
+
+    # 4) Risk
+    with tabs[3]:
+        st.subheader("ความเสี่ยงและความปลอดภัย (Risk & Safety)")
+        if risk_events.empty:
+            st.info("ยังไม่มีข้อมูลชีต 'RiskEvents'")
+        else:
+            risk_df = risk_events.copy()
+            risk_df["วันที่เกิดเหตุ"] = pd.to_datetime(risk_df["วันที่เกิดเหตุ"], errors="coerce")
+            st.dataframe(
+                risk_df.sort_values("วันที่เกิดเหตุ", ascending=False),
+                use_container_width=True,
+            )
+
+            st.markdown("#### เหตุการณ์แบ่งตามระดับความรุนแรง")
+            st.bar_chart(
+                risk_df.groupby("ระดับความรุนแรง (Severity)")["รหัสเครื่องมือห้องปฏิบัติการ"]
+                .count()
+                .sort_values(ascending=False),
+                use_container_width=True,
+            )
+
+    # 5) Quality Docs overview
+    with tabs[4]:
+        st.subheader("Quality Documentation Hub – ภาพรวม")
+        st.write(
+            "รายละเอียดการเพิ่ม/แก้ไขเอกสารอยู่ที่หน้า `เอกสารคุณภาพ` ในเมนูด้านซ้าย (ไฟล์ 5_เอกสารคุณภาพ.py)"
+        )
+
+    # 6) Analytics snapshot
+    with tabs[5]:
+        st.subheader("Analytics Snapshot")
+        if not assets.empty and "หมวดหมู่" in assets.columns:
+            st.markdown("#### จำนวนเครื่องมือแบ่งตามหมวดหมู่")
+            st.bar_chart(
+                assets.groupby("หมวดหมู่")["รหัสเครื่องมือห้องปฏิบัติการ"].count().sort_values(ascending=False),
+                use_container_width=True,
+            )
+        if not maintenance.empty:
+            st.markdown("#### Top 10 เครื่องมือที่มีงานซ่อม/PM มากที่สุด")
+            st.bar_chart(
+                maintenance.groupby("รหัสเครื่องมือห้องปฏิบัติการ")["วันที่"]
+                .count()
+                .sort_values(ascending=False)
+                .head(10),
+                use_container_width=True,
+            )
+
+    # 7) Notification overview
+    with tabs[6]:
+        st.subheader("Smart Notification – ภาพรวม")
+        st.write(
+            """
+            ระบบแจ้งเตือนจะอาศัย Due Date จาก Calibration / PM และอายุการใช้งาน
+            ค่าตั้งต่าง ๆ สามารถกำหนดได้ที่หน้า `Smart_Notification` จากเมนูด้านซ้าย
+            จากนั้นสามารถใช้ Google Apps Script หรือ Python ภายนอกดึงข้อมูลไปยิง LINE / Email ต่อได้
+            """
+        )
+
+
+if __name__ == "__main__":
+    main()
